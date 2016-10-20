@@ -52,10 +52,10 @@ int main(int argc, char *argv[])
 		else
 			printf ("TestCase#%d: *** NOT PASSED ***\n",iIndex+1);
 
-		system("PAUSE");
+		getchar();
 	}
 
 	printf ("********** EXECUTION FINISHED *************");
-    system("PAUSE");
+    getchar();
     return EXIT_SUCCESS;
 }

@@ -1,6 +1,8 @@
 #include <math.h>
 #include <stdio.h>
 
+//#define __GEODESIAN__ 1
+
 #define ARMED_THRESHOLD 1800
 #define MIN_SPEED 2.0
 #define MAX_SPEED 12.0
@@ -45,76 +47,94 @@ float dst_vals [ALTITUDE_VALUES][SPEED_VALUES]= {
 	{5.45,	8,		10.75,	13.4,	16,		18.5,	21.15,	23.7,	26.2,	28.7,	31.2},
 	{5.5,	8.1,	10.8,	13.5,	16.2,	18.85,	21.4,	24,		26.5,	29,		31.5} };
 
-double toRadians(double degree)
-{
-	double r = degree * M_PI / 180;
-	return r;
+float deg_to_rad(float degrees) {
+  return (degrees * M_PI / 180.0);
 }
 
-double getDistance(double lat1, double lon1, double lat2, double lon2)
-{
-	double a = 6378137, b = 6356752.314245, f = 1 / 298.257223563;
-	double L = toRadians(lon2 - lon1);
+#ifdef __GEODESIAN__
+	double calc_distance(double lat1, double lon1, double lat2, double lon2)
+	{
+		double a = 6378137, b = 6356752.314245, f = 1 / 298.257223563;
+		double L = deg_to_rad(lon2 - lon1);
 
-	double U1 = atan((1 - f) * tan(toRadians(lat1)));
-	double U2 = atan((1 - f) * tan(toRadians(lat2)));
-	double sinU1 = sin(U1), cosU1 = cos(U1);
-	double sinU2 = sin(U2), cosU2 = cos(U2);
-	double cosSqAlpha;
-	double sinSigma;
-	double cos2SigmaM;
-	double cosSigma;
-	double sigma;
+		double U1 = atan((1 - f) * tan(deg_to_rad(lat1)));
+		double U2 = atan((1 - f) * tan(deg_to_rad(lat2)));
+		double sinU1 = sin(U1), cosU1 = cos(U1);
+		double sinU2 = sin(U2), cosU2 = cos(U2);
+		double cosSqAlpha;
+		double sinSigma;
+		double cos2SigmaM;
+		double cosSigma;
+		double sigma;
 
-	double lambda = L, lambdaP, iterLimit = 100;
-	do {
-		double sinLambda = sin(lambda), cosLambda = cos(lambda);
-		sinSigma = sqrt(	(cosU2 * sinLambda)
-						* (cosU2 * sinLambda)
-							+ (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
-								* (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
+		double lambda = L, lambdaP, iterLimit = 100;
+		do {
+			double sinLambda = sin(lambda), cosLambda = cos(lambda);
+			sinSigma = sqrt(	(cosU2 * sinLambda)
+							* (cosU2 * sinLambda)
+								+ (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
+									* (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
+								);
+			if (sinSigma == 0) {
+				return 0;
+			}
+
+			cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
+			sigma = atan2(sinSigma, cosSigma);
+			double sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma;
+			cosSqAlpha = 1 - sinAlpha * sinAlpha;
+			cos2SigmaM = cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha;
+
+			double C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha));
+			lambdaP = lambda;
+			lambda = 	L + (1 - C) * f * sinAlpha
+						* 	(sigma + C * sinSigma
+							* 	(cos2SigmaM + C * cosSigma
+								* 	(-1 + 2 * cos2SigmaM * cos2SigmaM)
+								)
 							);
-		if (sinSigma == 0) {
+
+		} while (fabs(lambda - lambdaP) > 1e-12 && --iterLimit > 0);
+
+		if (iterLimit == 0) {
 			return 0;
 		}
 
-		cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
-		sigma = atan2(sinSigma, cosSigma);
-		double sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma;
-		cosSqAlpha = 1 - sinAlpha * sinAlpha;
-		cos2SigmaM = cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha;
+		double uSq = cosSqAlpha * (a * a - b * b) / (b * b);
+		double A = 1 + uSq / 16384
+				* (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
+		double B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
+		double deltaSigma =
+					B * sinSigma
+						* (cos2SigmaM + B / 4
+							* (cosSigma
+								* (-1 + 2 * cos2SigmaM * cos2SigmaM) - B / 6 * cos2SigmaM
+									* (-3 + 4 * sinSigma * sinSigma)
+										* (-3 + 4 * cos2SigmaM * cos2SigmaM)));
 
-		double C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha));
-		lambdaP = lambda;
-		lambda = 	L + (1 - C) * f * sinAlpha
-					* 	(sigma + C * sinSigma
-						* 	(cos2SigmaM + C * cosSigma
-							* 	(-1 + 2 * cos2SigmaM * cos2SigmaM)
-							)
-						);
+		double s = b * A * (sigma - deltaSigma);
 
-	} while (fabs(lambda - lambdaP) > 1e-12 && --iterLimit > 0);
-
-	if (iterLimit == 0) {
-		return 0;
+		return s;
 	}
+#else
+	#define EARTH_RADIUS 6378140
 
-	double uSq = cosSqAlpha * (a * a - b * b) / (b * b);
-	double A = 1 + uSq / 16384
-			* (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
-	double B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-	double deltaSigma =
-				B * sinSigma
-					* (cos2SigmaM + B / 4
-						* (cosSigma
-							* (-1 + 2 * cos2SigmaM * cos2SigmaM) - B / 6 * cos2SigmaM
-								* (-3 + 4 * sinSigma * sinSigma)
-									* (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+	float calc_distance(float lat1, float lon1, float lat2, float lon2) {
+	  float dlon, dlat, a, c;
+	  float dist = 0.0;
 
-	double s = b * A * (sigma - deltaSigma);
+	  // calculate distance difference in radians
+	  dlon = deg_to_rad(lon2 - lon1);
+	  dlat = deg_to_rad(lat2 - lat1);
 
-	return s;
-}
+	  // haversine
+	  a = pow(sin(dlat/2),2) + cos(deg_to_rad(lat1)) * cos(deg_to_rad(lat2)) * pow(sin(dlon/2),2);
+	  c = 2 * atan2(sqrt(a), sqrt(1-a));
+	  dist = EARTH_RADIUS * c;
+
+	  return dist;
+	}
+#endif /* __GEODESIAN__ */
 
 // *** release_calc ***
 // Create: 01/10/2016
@@ -152,7 +172,7 @@ bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double
   }
 
   // Calculate distance to target
-  distance = getDistance(dCurrLat, dCurrLong, dTargetLat, dTargetLong);
+  distance = calc_distance(dCurrLat, dCurrLong, dTargetLat, dTargetLong);
 
   // Interpolate value using the ballistic algorithm
   {

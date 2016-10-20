@@ -1,11 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 
-#define EARTH_RADIUS 6368148
-
 #define ARMED_THRESHOLD 1800
-#define BEAR_THRESHOLD 30.0
-#define DIST_THRESHOLD 0.02
 #define MIN_SPEED 2.0
 #define MAX_SPEED 12.0
 #define MIN_ALTITUDE 10.0
@@ -60,7 +56,6 @@ double getDistance(double lat1, double lon1, double lat2, double lon2)
 	double a = 6378137, b = 6356752.314245, f = 1 / 298.257223563;
 	double L = toRadians(lon2 - lon1);
 
-
 	double U1 = atan((1 - f) * tan(toRadians(lat1)));
 	double U2 = atan((1 - f) * tan(toRadians(lat2)));
 	double sinU1 = sin(U1), cosU1 = cos(U1);
@@ -72,16 +67,14 @@ double getDistance(double lat1, double lon1, double lat2, double lon2)
 	double sigma;
 
 	double lambda = L, lambdaP, iterLimit = 100;
-	do
-	{
+	do {
 		double sinLambda = sin(lambda), cosLambda = cos(lambda);
 		sinSigma = sqrt(	(cosU2 * sinLambda)
 						* (cosU2 * sinLambda)
 							+ (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
 								* (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
 							);
-		if (sinSigma == 0)
-		{
+		if (sinSigma == 0) {
 			return 0;
 		}
 
@@ -102,8 +95,7 @@ double getDistance(double lat1, double lon1, double lat2, double lon2)
 
 	} while (fabs(lambda - lambdaP) > 1e-12 && --iterLimit > 0);
 
-	if (iterLimit == 0)
-	{
+	if (iterLimit == 0) {
 		return 0;
 	}
 
@@ -149,7 +141,7 @@ bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double
     return false;
   }
 
-  // Check fSpeed
+  // Check speed
   if (fSpeed < MIN_SPEED || fSpeed > MAX_SPEED) {
     return false;
   }
@@ -180,10 +172,10 @@ bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double
 	}
   }
 
-  printf("interp=%f ; distance=%f; offset=%f\n", interp, distance, fOffset);
+  printf("interp=%f ; distance=%f\n", interp, distance);
 
   // Check release threshold
-  if (distance <= interp) {
+  if (distance + fOffset <= interp) {
 	  return true;
   } else {
 	  return false;

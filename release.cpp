@@ -1,7 +1,9 @@
 #include <math.h>
 #include <stdio.h>
 
-//#define __GEODESIAN__ 1
+#define __DEBUG__
+#define __INTERP_2D__
+//#define __GEODESIAN__
 
 #define ARMED_THRESHOLD 1800
 #define MIN_SPEED 2.0
@@ -14,7 +16,7 @@
 #define DISTANCE_VALUES SPEED_VALUES * ALTITUDE_VALUES
 float spd_vals[SPEED_VALUES] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
 float alt_vals[ALTITUDE_VALUES] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40};
-float dst_vals [ALTITUDE_VALUES][SPEED_VALUES]= {
+float dst_vals[ALTITUDE_VALUES][SPEED_VALUES] = {
 	{2.8,	4.2,	5.6,	7,		8.4,	9.7,	11.1,	12.5,	13.8,	15.1,	16.5},
 	{2.95,	4.45,	5.85,	7.3,	8.8,	10.2,	11.6,	13,		14.4,	15.8,	17.3},
 	{3.1,	4.6,	6.2,	7.6,	9.1,	10.7,	12.2,	13.7,	15.1,	16.6,	18	},
@@ -136,6 +138,53 @@ float deg_to_rad(float degrees) {
 	}
 #endif /* __GEODESIAN__ */
 
+#ifdef __INTERP_2D__
+	double interp_distance(float fSpeed, float fHeight) {
+		double x = (double) fHeight, y = (double) fSpeed;
+		double x_min = MIN_ALTITUDE, x_max = MAX_ALTITUDE;
+		double y_min = MIN_SPEED, y_max = MAX_SPEED;
+		double interp = 0.0;
+		double mf, nf;
+		int m, n;
+
+		// Find integer and fractional part of column index
+		nf = (SPEED_VALUES-1) * (x - x_min) / (x_max - x_min);
+		n = (int)nf;
+		nf = nf - n;
+
+		// Find integer and fractional part of row index
+		mf = (ALTITUDE_VALUES-1) * (y - y_min) / (y_max - y_min);
+		m = (int)mf;
+		mf = mf - m;
+
+		// Calculate interpolated estimated
+		interp = (1-nf)*(1-mf)*dst_vals[m][n] + nf*(1-mf)*dst_vals[m][n+1] + (1-nf)*mf*dst_vals[m+1][n] + nf*mf*dst_vals[m+1][n+1];
+
+		return interp;
+	}
+#else
+	double interp_distance(float fSpeed, float fHeight) {
+		int i, j;
+		int speed = (int) fSpeed;
+		int altitude = (int) fHeight;
+		double interp = 0.0;
+
+		for (i = 0; i < ALTITUDE_VALUES; i++) {
+			if (altitude == alt_vals[i]) {
+				for (j = 0; j < SPEED_VALUES; j++) {
+					if (speed == spd_vals[j]) {
+						interp = floor(dst_vals[i][j]);
+						break;
+					}
+				}
+				break;
+			}
+		}
+
+		return interp;
+	}
+#endif /* __INTERP_2D__ */
+
 // *** release_calc ***
 // Create: 01/10/2016
 // Author: Sergio Carretero - Airbus Defence & Space
@@ -175,24 +224,11 @@ bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double
   distance = calc_distance(dCurrLat, dCurrLong, dTargetLat, dTargetLong);
 
   // Interpolate value using the ballistic algorithm
-  {
-	int i, j;
-	int speed = (int) fSpeed;
-	int altitude = (int) fHeight;
-	for (i = 0; i < SPEED_VALUES; i++) {
-		if (spd_vals[i] == speed) {
-			for (j = 0; j < ALTITUDE_VALUES; j++) {
-				if (altitude == alt_vals[j]) {
-					interp = floor(dst_vals[j][i]);
-					break;
-				}
-			}
-			break;
-		}
-	}
-  }
+	interp = interp_distance(fSpeed, fHeight);
 
+#ifdef __DEBUG__
   printf("interp=%f ; distance=%f\n", interp, distance);
+#endif
 
   // Check release threshold
   if (distance + fOffset <= interp) {

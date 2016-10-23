@@ -226,12 +226,15 @@ bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double
 	// Interpolate value using the ballistic algorithm
 	interp = interp_distance(fSpeed, fHeight);
 
+	// Apply fix to interpolation
+	interp += fOffset;
+
 #ifdef __DEBUG__
 	printf("interp=%f ; distance=%f\n", interp, distance);
 #endif
 
 	// Check release threshold
-	if (distance + fOffset <= interp) {
+	if (distance <= interp) {
 		return true;
 	} else {
 		return false;

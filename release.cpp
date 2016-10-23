@@ -50,7 +50,7 @@ float dst_vals[ALTITUDE_VALUES][SPEED_VALUES] = {
 	{5.5,	8.1,	10.8,	13.5,	16.2,	18.85,	21.4,	24,		26.5,	29,		31.5} };
 
 float deg_to_rad(float degrees) {
-  return (degrees * M_PI / 180.0);
+	return (degrees * M_PI / 180.0);
 }
 
 #ifdef __GEODESIAN__
@@ -122,19 +122,19 @@ float deg_to_rad(float degrees) {
 	#define EARTH_RADIUS 6378140
 
 	float calc_distance(float lat1, float lon1, float lat2, float lon2) {
-	  float dlon, dlat, a, c;
-	  float dist = 0.0;
+		float dlon, dlat, a, c;
+		float dist = 0.0;
 
-	  // calculate distance difference in radians
-	  dlon = deg_to_rad(lon2 - lon1);
-	  dlat = deg_to_rad(lat2 - lat1);
+		// calculate distance difference in radians
+		dlon = deg_to_rad(lon2 - lon1);
+		dlat = deg_to_rad(lat2 - lat1);
 
-	  // haversine
-	  a = pow(sin(dlat/2),2) + cos(deg_to_rad(lat1)) * cos(deg_to_rad(lat2)) * pow(sin(dlon/2),2);
-	  c = 2 * atan2(sqrt(a), sqrt(1-a));
-	  dist = EARTH_RADIUS * c;
+		// haversine
+		a = pow(sin(dlat/2),2) + cos(deg_to_rad(lat1)) * cos(deg_to_rad(lat2)) * pow(sin(dlon/2),2);
+		c = 2 * atan2(sqrt(a), sqrt(1-a));
+		dist = EARTH_RADIUS * c;
 
-	  return dist;
+		return dist;
 	}
 #endif /* __GEODESIAN__ */
 
@@ -202,38 +202,38 @@ float deg_to_rad(float degrees) {
 // Return:
 //   - bool. True if the payload must be released. False if the payload must not be released.
 bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double dCurrLong, float fSpeed, float fHeight, int iArmedSystemSignal, int iArmedWeaponSignal, float fOffset){
-  double distance = 0.0;
-  double interp = 0.0;
+	double distance = 0.0;
+	double interp = 0.0;
 
-  // Check armed status
-  if (iArmedSystemSignal < ARMED_THRESHOLD || iArmedWeaponSignal < ARMED_THRESHOLD) {
-    return false;
-  }
+	// Check armed status
+	if (iArmedSystemSignal < ARMED_THRESHOLD || iArmedWeaponSignal < ARMED_THRESHOLD) {
+		return false;
+	}
 
-  // Check speed
-  if (fSpeed < MIN_SPEED || fSpeed > MAX_SPEED) {
-    return false;
-  }
+	// Check speed
+	if (fSpeed < MIN_SPEED || fSpeed > MAX_SPEED) {
+		return false;
+	}
 
-  // Check altitude
-  if (fHeight < MIN_ALTITUDE || fHeight > MAX_ALTITUDE) {
-    return false;
-  }
+	// Check altitude
+	if (fHeight < MIN_ALTITUDE || fHeight > MAX_ALTITUDE) {
+		return false;
+	}
 
-  // Calculate distance to target
-  distance = calc_distance(dCurrLat, dCurrLong, dTargetLat, dTargetLong);
+	// Calculate distance to target
+	distance = calc_distance(dCurrLat, dCurrLong, dTargetLat, dTargetLong);
 
-  // Interpolate value using the ballistic algorithm
+	// Interpolate value using the ballistic algorithm
 	interp = interp_distance(fSpeed, fHeight);
 
 #ifdef __DEBUG__
-  printf("interp=%f ; distance=%f\n", interp, distance);
+	printf("interp=%f ; distance=%f\n", interp, distance);
 #endif
 
-  // Check release threshold
-  if (distance + fOffset <= interp) {
-	  return true;
-  } else {
-	  return false;
-  }
+	// Check release threshold
+	if (distance + fOffset <= interp) {
+		return true;
+	} else {
+		return false;
+	}
 }

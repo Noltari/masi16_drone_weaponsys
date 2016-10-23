@@ -1,10 +1,7 @@
 #include <math.h>
 #include <stdio.h>
 
-#define __DEBUG__
-#define __INTERP_2D__
-//#define __GEODESIAN__
-
+#define EARTH_RADIUS 6378140
 #define ARMED_THRESHOLD 1800
 #define MIN_SPEED 2.0
 #define MAX_SPEED 12.0
@@ -53,137 +50,45 @@ float deg_to_rad(float degrees) {
 	return (degrees * M_PI / 180.0);
 }
 
-#ifdef __GEODESIAN__
-	double calc_distance(double lat1, double lon1, double lat2, double lon2)
-	{
-		double a = 6378137, b = 6356752.314245, f = 1 / 298.257223563;
-		double L = deg_to_rad(lon2 - lon1);
+float calc_distance(float lat1, float lon1, float lat2, float lon2) {
+	float dlon, dlat, a, c;
+	float dist = 0.0;
 
-		double U1 = atan((1 - f) * tan(deg_to_rad(lat1)));
-		double U2 = atan((1 - f) * tan(deg_to_rad(lat2)));
-		double sinU1 = sin(U1), cosU1 = cos(U1);
-		double sinU2 = sin(U2), cosU2 = cos(U2);
-		double cosSqAlpha;
-		double sinSigma;
-		double cos2SigmaM;
-		double cosSigma;
-		double sigma;
+	// calculate distance difference in radians
+	dlon = deg_to_rad(lon2 - lon1);
+	dlat = deg_to_rad(lat2 - lat1);
 
-		double lambda = L, lambdaP, iterLimit = 100;
-		do {
-			double sinLambda = sin(lambda), cosLambda = cos(lambda);
-			sinSigma = sqrt(	(cosU2 * sinLambda)
-							* (cosU2 * sinLambda)
-								+ (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
-									* (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda)
-								);
-			if (sinSigma == 0) {
-				return 0;
-			}
+	// haversine
+	a = pow(sin(dlat/2),2) + cos(deg_to_rad(lat1)) * cos(deg_to_rad(lat2)) * pow(sin(dlon/2),2);
+	c = 2 * atan2(sqrt(a), sqrt(1-a));
+	dist = EARTH_RADIUS * c;
 
-			cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
-			sigma = atan2(sinSigma, cosSigma);
-			double sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma;
-			cosSqAlpha = 1 - sinAlpha * sinAlpha;
-			cos2SigmaM = cosSigma - 2 * sinU1 * sinU2 / cosSqAlpha;
+	return dist;
+}
 
-			double C = f / 16 * cosSqAlpha * (4 + f * (4 - 3 * cosSqAlpha));
-			lambdaP = lambda;
-			lambda = 	L + (1 - C) * f * sinAlpha
-						* 	(sigma + C * sinSigma
-							* 	(cos2SigmaM + C * cosSigma
-								* 	(-1 + 2 * cos2SigmaM * cos2SigmaM)
-								)
-							);
+double interp_distance(float fSpeed, float fHeight) {
+	double x = (double) fHeight, y = (double) fSpeed;
+	double x_min = MIN_ALTITUDE, x_max = MAX_ALTITUDE;
+	double y_min = MIN_SPEED, y_max = MAX_SPEED;
+	double interp = 0.0;
+	double mf, nf;
+	int m, n;
 
-		} while (fabs(lambda - lambdaP) > 1e-12 && --iterLimit > 0);
+	// Find integer and fractional part of column index
+	nf = (SPEED_VALUES-1) * (x - x_min) / (x_max - x_min);
+	n = (int)nf;
+	nf = nf - n;
 
-		if (iterLimit == 0) {
-			return 0;
-		}
+	// Find integer and fractional part of row index
+	mf = (ALTITUDE_VALUES-1) * (y - y_min) / (y_max - y_min);
+	m = (int)mf;
+	mf = mf - m;
 
-		double uSq = cosSqAlpha * (a * a - b * b) / (b * b);
-		double A = 1 + uSq / 16384
-				* (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
-		double B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-		double deltaSigma =
-					B * sinSigma
-						* (cos2SigmaM + B / 4
-							* (cosSigma
-								* (-1 + 2 * cos2SigmaM * cos2SigmaM) - B / 6 * cos2SigmaM
-									* (-3 + 4 * sinSigma * sinSigma)
-										* (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+	// Calculate interpolated estimated
+	interp = (1-nf)*(1-mf)*dst_vals[m][n] + nf*(1-mf)*dst_vals[m][n+1] + (1-nf)*mf*dst_vals[m+1][n] + nf*mf*dst_vals[m+1][n+1];
 
-		double s = b * A * (sigma - deltaSigma);
-
-		return s;
-	}
-#else
-	#define EARTH_RADIUS 6378140
-
-	float calc_distance(float lat1, float lon1, float lat2, float lon2) {
-		float dlon, dlat, a, c;
-		float dist = 0.0;
-
-		// calculate distance difference in radians
-		dlon = deg_to_rad(lon2 - lon1);
-		dlat = deg_to_rad(lat2 - lat1);
-
-		// haversine
-		a = pow(sin(dlat/2),2) + cos(deg_to_rad(lat1)) * cos(deg_to_rad(lat2)) * pow(sin(dlon/2),2);
-		c = 2 * atan2(sqrt(a), sqrt(1-a));
-		dist = EARTH_RADIUS * c;
-
-		return dist;
-	}
-#endif /* __GEODESIAN__ */
-
-#ifdef __INTERP_2D__
-	double interp_distance(float fSpeed, float fHeight) {
-		double x = (double) fHeight, y = (double) fSpeed;
-		double x_min = MIN_ALTITUDE, x_max = MAX_ALTITUDE;
-		double y_min = MIN_SPEED, y_max = MAX_SPEED;
-		double interp = 0.0;
-		double mf, nf;
-		int m, n;
-
-		// Find integer and fractional part of column index
-		nf = (SPEED_VALUES-1) * (x - x_min) / (x_max - x_min);
-		n = (int)nf;
-		nf = nf - n;
-
-		// Find integer and fractional part of row index
-		mf = (ALTITUDE_VALUES-1) * (y - y_min) / (y_max - y_min);
-		m = (int)mf;
-		mf = mf - m;
-
-		// Calculate interpolated estimated
-		interp = (1-nf)*(1-mf)*dst_vals[m][n] + nf*(1-mf)*dst_vals[m][n+1] + (1-nf)*mf*dst_vals[m+1][n] + nf*mf*dst_vals[m+1][n+1];
-
-		return interp;
-	}
-#else
-	double interp_distance(float fSpeed, float fHeight) {
-		int i, j;
-		int speed = (int) fSpeed;
-		int altitude = (int) fHeight;
-		double interp = 0.0;
-
-		for (i = 0; i < ALTITUDE_VALUES; i++) {
-			if (altitude == alt_vals[i]) {
-				for (j = 0; j < SPEED_VALUES; j++) {
-					if (speed == spd_vals[j]) {
-						interp = floor(dst_vals[i][j]);
-						break;
-					}
-				}
-				break;
-			}
-		}
-
-		return interp;
-	}
-#endif /* __INTERP_2D__ */
+	return interp;
+}
 
 // *** release_calc ***
 // Create: 01/10/2016
@@ -228,10 +133,6 @@ bool release_calc(double dTargetLat, double dTargetLong, double dCurrLat, double
 
 	// Apply fix to interpolation
 	interp += fOffset;
-
-#ifdef __DEBUG__
-	printf("interp=%f ; distance=%f\n", interp, distance);
-#endif
 
 	// Check release threshold
 	if (distance <= interp) {
